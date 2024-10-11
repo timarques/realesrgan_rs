@@ -1,0 +1,31 @@
+[package]
+name = "realesrgan_rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/rust/lib.rs"
+crate-type = ["lib"]
+
+[dependencies]
+libc = "0.2.159"
+image = { version = "0.25.2", optional = true }
+
+[build-dependencies]
+cmake = "^0.1.48"
+
+[profile.release]
+lto = true
+opt-level = 3
+strip = "debuginfo"
+panic = "abort"
+incremental = false
+
+[features]
+default = ["image", "models"]
+system-ncnn = []
+image = ["dep:image"]
+models = ["model-realesr-animevideov3", "model-realesrgan-plus", "model-realesrgan-plus-anime"]
+model-realesr-animevideov3 = []
+model-realesrgan-plus = []
+model-realesrgan-plus-anime = []
