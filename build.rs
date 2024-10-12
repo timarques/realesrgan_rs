@@ -16,13 +16,33 @@ fn execute_command(command: &mut Command) -> Result<(), String> {
     Ok(())
 }
 
+fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
 fn download_models(output: &PathBuf) -> Result<(), String> {
-    let models_dir = "./models";
+    let models_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("models");
     if std::fs::exists(&models_dir).unwrap() {
         return Ok(())
     }
 
     let release_dir = output.join("release");
+
+    if release_dir.exists() {
+        std::fs::remove_dir_all(&release_dir)
+            .map_err(|e| e.to_string())?;
+    }
+
     execute_command(
         Command::new("wget")
             .args(&["-P", &output.to_str().unwrap()])
@@ -35,7 +55,13 @@ fn download_models(output: &PathBuf) -> Result<(), String> {
             .args(&["-d", &release_dir.to_str().unwrap()])
     )?;
 
-    std::fs::rename(release_dir.join("models"), &models_dir)
+    std::fs::remove_file(output.join("realesrgan-ncnn-vulkan-20220424-ubuntu.zip"))
+        .map_err(|e| e.to_string())?;
+
+    copy_dir_all(&release_dir.join("models"), &models_dir)
+        .map_err(|e| e.to_string())?;
+
+    std::fs::remove_dir_all(&release_dir)
         .map_err(|e| e.to_string())?;
     Ok(())
 }

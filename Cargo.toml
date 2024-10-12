@@ -18,7 +18,7 @@ cmake = "^0.1.48"
 lto = true
 opt-level = 3
 strip = true
-panic = "unwind"
+panic = "abort"
 incremental = false
 
 [features]
