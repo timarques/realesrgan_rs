@@ -1,5 +1,5 @@
 use std::path::Path;
-use realesrgan_rs::{RealEsrgan, Model, Options};
+use realesrgan_rs::{RealEsrgan, Options, OptionsModel};
 
 const IMAGE: &str = "./tests/image.jpg";
 
@@ -8,7 +8,7 @@ const IMAGE: &str = "./tests/image.jpg";
 fn from_file_bytes() {
     assert!(Path::new(IMAGE).exists(), "Test image does not exist");
 
-    let result = RealEsrgan::new(Options::default().model(Model::RealESRAnimeVideoV3x2));
+    let result = RealEsrgan::new(Options::default().model(OptionsModel::RealESRAnimeVideoV3x2));
     assert!(result.is_ok(), "{}", result.err().unwrap().to_string());
     let realesrgan = result.unwrap();
 
@@ -22,7 +22,7 @@ fn from_file_bytes() {
 #[cfg(feature = "image")]
 fn from_image() {
     assert!(Path::new(IMAGE).exists(), "Test image does not exist");
-    let result = RealEsrgan::new(Options::default().model(Model::RealESRAnimeVideoV3x2));
+    let result = RealEsrgan::new(Options::default().model(OptionsModel::RealESRAnimeVideoV3x2));
 
     assert!(result.is_ok(), "{}", result.err().unwrap().to_string());
     let realesrgan = result.unwrap();
@@ -57,7 +57,7 @@ fn from_image() {
 #[cfg(feature = "image")]
 #[test]
 fn with_threads() {
-    let result = RealEsrgan::new(Options::default().model(Model::RealESRAnimeVideoV3x2));
+    let result = RealEsrgan::new(Options::default().model(OptionsModel::RealESRAnimeVideoV3x2));
 
     assert!(result.is_ok(), "{}", result.err().unwrap().to_string());
     let realesrgan = result.unwrap();

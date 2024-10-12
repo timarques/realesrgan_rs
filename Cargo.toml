@@ -17,8 +17,8 @@ cmake = "^0.1.48"
 [profile.release]
 lto = true
 opt-level = 3
-strip = "debuginfo"
-panic = "abort"
+strip = true
+panic = "unwind"
 incremental = false
 
 [features]

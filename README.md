@@ -23,13 +23,13 @@ realesrgan-rs = { git = "https://github.com/timarques/realesrgan_rs.git" }
 ```
 
 ```rs
-use realesrgan_rs::{RealEsrgan, Model, Options};
+use realesrgan_rs::{RealEsrgan, Options, OptionsModel};
 use image;
 
 let param_path = "path/to/param/file";
 let bin_path = "path/to/bin/file";
 
-let realesrgan = RealEsrgan::new(Options::default().model(Model::RealESRAnimeVideoV3x2));
+let realesrgan = RealEsrgan::new(Options::default().model(OptionsModel::RealESRAnimeVideoV3x2)).unwrap();
 
 let input_image = image::open("input.png").unwrap();
 let output_image = realesrgan.process_image(input_image)?;
@@ -41,13 +41,13 @@ output_image.save("output.png").unwrap();
 The Builder pattern allows for detailed configuration:
 
 ```rs
-use realesrgan_rs::{RealEsrgan, Model, Options};
+use realesrgan_rs::{RealEsrgan, Options, OptionsScaleFactor};
 
 let realesrgan_options = Options::default()
     .gpuid(0)
     .tta_mode(false)
     .tilesize(0)
-    .scale_factor(4)
+    .scale_factor(OptionsScaleFactor::Quadruple)
     .model_files("/path/to/model.param", "/path/to/model.bin");
 let realesrgan = RealEsrgan::new(options);
 ```

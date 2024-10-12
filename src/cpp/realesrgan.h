@@ -3,8 +3,6 @@
 #ifndef REALESRGAN_H
 #define REALESRGAN_H
 
-#include <string>
-
 // ncnn
 #include "net.h"
 #include "gpu.h"

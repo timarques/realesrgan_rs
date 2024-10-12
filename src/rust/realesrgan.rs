@@ -1,25 +1,18 @@
 use crate::Options;
 
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Once;
 
-use image::{ColorType, DynamicImage, ImageBuffer};
 use libc::{c_char, c_int, c_uchar, c_void, FILE};
 
 extern "C" {
     fn realesrgan_init(
         gpuid: c_int,
         tta_mode: bool,
-    ) -> *mut c_void;
-
-    fn realesrgan_set_parameters(
-        realesrgan: *mut c_void,
-        gpuid: c_int,
         scale: c_int,
         tilesize: c_int,
-    );
+    ) -> *mut c_void;
 
     fn realesrgan_get_gpu_count() -> c_int;
 
@@ -47,7 +40,7 @@ extern "C" {
 #[derive(Clone, Debug)]
 pub struct RealEsrgan {
     pointer: Arc<AtomicPtr<c_void>>,
-    scale_factor: u8,
+    scale_factor: i32,
 }
 
 impl RealEsrgan {
@@ -90,7 +83,7 @@ impl RealEsrgan {
         }
     }
 
-    fn clean_up() {
+    fn setup_clean_up() {
         static CLEANUP: Once = Once::new();
         CLEANUP.call_once(|| {
             extern "C" fn cleanup() {
@@ -101,12 +94,10 @@ impl RealEsrgan {
     }
 
     pub fn new(options: Options) -> Result<Self, String> {
-        let gpuid = options.gpuid as i32;
-        Self::validate_gpu(gpuid)?;
-        let pointer = unsafe { realesrgan_init(gpuid, options.tta_mode) };
+        Self::validate_gpu(options.gpuid)?;
+        let pointer = unsafe { realesrgan_init(options.gpuid, options.tta_mode, options.scale_factor, options.tilesize) };
         Self::load_model(pointer, options.param, options.bin)?;
-        unsafe { realesrgan_set_parameters(pointer, gpuid, options.scale_factor as i32, options.tilesize as i32) };
-        Self::clean_up();
+        Self::setup_clean_up();
 
         Ok(Self {
             pointer: Arc::new(AtomicPtr::new(pointer)),
@@ -149,13 +140,15 @@ impl RealEsrgan {
     }
 
     #[cfg(feature = "image")]
-    pub fn process_file<P: AsRef<Path>>(&self, path: P) -> Result<DynamicImage, String> {
+    pub fn process_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<crate::Image, String> {
         let img = image::open(path).map_err(|e| format!("failed to open image: {}", e))?;
         self.process_image(img)
     }
 
     #[cfg(feature = "image")]
-    pub fn process_image(&self, image: DynamicImage) -> Result<DynamicImage, String> {
+    pub fn process_image(&self, image: crate::Image) -> Result<crate::Image, String> {
+        use image::{ColorType, ImageBuffer, DynamicImage};
+
         let color_type = image.color();
         let input = image.to_rgb8().into_raw();
         let width = image.width();
@@ -168,7 +161,7 @@ impl RealEsrgan {
             ColorType::Rgb8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgb8),
             ColorType::Rgba8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgba8),
             ColorType::L8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageLuma8),
-            ColorType::La8 => image::ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageLumaA8),
+            ColorType::La8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageLumaA8),
             _ => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgb8),
         };
     

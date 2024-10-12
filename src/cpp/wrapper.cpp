@@ -1,34 +1,7 @@
 #include "realesrgan.h"
 
-#include <algorithm>
-#include <vector>
-#include <map>
-
-// ncnn
-#include "gpu.h"
-
-extern "C" RealESRGAN *realesrgan_init(int gpuid, bool tta_mode) {
-    return new RealESRGAN(gpuid, tta_mode);
-}
-
-extern "C" int realesrgan_get_gpu_count() {
-    return ncnn::get_gpu_count();
-}
-
-extern "C" int realesrgan_load_files(
-    RealESRGAN *realesrgan,
-    FILE* param,
-    FILE* bin
-) {
-    return realesrgan->load_files(param, bin);
-}
-
-extern "C" void realesrgan_set_parameters(
-    RealESRGAN *realesrgan,
-    int gpuid,
-    int scale,
-    int tilesize
-) {
+extern "C" RealESRGAN *realesrgan_init(int gpuid, bool tta_mode, int scale, int tilesize) {
+    RealESRGAN *realesrgan = new RealESRGAN(gpuid, tta_mode);
     if (tilesize == 0) {
         uint32_t heap_budget = ncnn::get_gpu_device(gpuid)->get_heap_budget();
         if (heap_budget > 1900) {
@@ -44,6 +17,19 @@ extern "C" void realesrgan_set_parameters(
     realesrgan->tilesize = tilesize;
     realesrgan->scale = scale;
     realesrgan->prepadding = 10;
+    return realesrgan;
+}
+
+extern "C" int realesrgan_get_gpu_count() {
+    return ncnn::get_gpu_count();
+}
+
+extern "C" int realesrgan_load_files(
+    RealESRGAN *realesrgan,
+    FILE* param,
+    FILE* bin
+) {
+    return realesrgan->load_files(param, bin);
 }
 
 extern "C" int realesrgan_process(
