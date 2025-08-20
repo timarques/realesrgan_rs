@@ -1,174 +1,129 @@
-use cmake::Config;
-use core::panic;
-use std::process::Command;
-use std::io::BufRead;
-use std::path::PathBuf;
-
-const NCNN_REPO_URL: &str = "https://github.com/Tencent/ncnn";
-const NCNN_COMMIT_HASH: &str = "6125c9f47cd14b589de0521350668cf9d3d37e3c";
-const REALESRGAN_RELEASE: &str = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-ubuntu.zip";
-
-fn execute_command(command: &mut Command) -> Result<(), String> {
-    let status = command.status().map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!("Command failed with exit code: {}", status));
-    }
-    Ok(())
-}
-
-fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
-
-fn download_models(output: &PathBuf) -> Result<(), String> {
-    let models_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("models");
-    if std::fs::exists(&models_dir).unwrap() {
-        return Ok(())
-    }
-
-    let release_dir = output.join("release");
-
-    if release_dir.exists() {
-        std::fs::remove_dir_all(&release_dir)
-            .map_err(|e| e.to_string())?;
-    }
-
-    execute_command(
-        Command::new("wget")
-            .args(&["-P", &output.to_str().unwrap()])
-            .arg(REALESRGAN_RELEASE)
-    )?;
-
-    execute_command(
-        Command::new("unzip")
-            .arg(output.join("realesrgan-ncnn-vulkan-20220424-ubuntu.zip"))
-            .args(&["-d", &release_dir.to_str().unwrap()])
-    )?;
-
-    std::fs::remove_file(output.join("realesrgan-ncnn-vulkan-20220424-ubuntu.zip"))
-        .map_err(|e| e.to_string())?;
-
-    copy_dir_all(&release_dir.join("models"), &models_dir)
-        .map_err(|e| e.to_string())?;
-
-    std::fs::remove_dir_all(&release_dir)
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-fn clone_ncnn(target_dir: &PathBuf) -> Result<(), String> {
-    if std::fs::exists(target_dir).unwrap() {
-        return Ok(())
-    }
-    execute_command(
-        Command::new("git")
-            .args(&["clone", "--recursive", NCNN_REPO_URL])
-            .arg(target_dir)
-    )?;
-
-    execute_command(
-        Command::new("git")
-            .current_dir(target_dir)
-            .args(&["checkout", NCNN_COMMIT_HASH])
-    )?;
-    Ok(())
-}
-
-fn configure_ncnn_build(target_dir: &PathBuf) -> Config {
-    let mut config = Config::new(target_dir);
-    config.define("NCNN_BUILD_TOOLS", "OFF")
-          .define("NCNN_BUILD_EXAMPLES", "OFF")
-          .define("NCNN_BUILD_BENCHMARK", "OFF")
-          .define("NCNN_ENABLE_LTO", "ON")
-          .define("NCNN_SHARED_LIB", "OFF")
-          .define("NCNN_VULKAN", "ON")
-          .define("NCNN_SYSTEM_GLSLANG", "OFF")
-          .define("CMAKE_BUILD_TYPE", "Release");
-    config
-}
-
-fn disable_logs(target_dir: &PathBuf) -> Result<(), std::io::Error> {
-    let platform_file = target_dir.join("src").join("platform.h.in");
-    let file = std::fs::File::open(&platform_file)?;
-    let reader = std::io::BufReader::new(file);
-
-    let mut text = String::new();
-    let mut skip_lines = false;
-
-    for line_result in reader.lines() {
-        let line = line_result?;
-
-        if line.contains("#define NCNN_LOGE(...) do {") {
-            skip_lines = true;
-            text += &format!("#define NCNN_LOGE(...)\n");
-            continue
-        } else if (line.contains("#endif") || line.contains("#else")) && skip_lines {
-            skip_lines = false;
-        } else if skip_lines {
-            continue
-        }
-        text += &format!("{}\n", line);
-    }
-
-    std::fs::write(platform_file, text)?;
-
-    Ok(())
-}
-
-fn build_ncnn(output: &PathBuf) -> Result<(), String> {
-    let target_dir = output.join("ncnn");
-
-    println!("cargo:rustc-link-lib={}", "vulkan");
-    println!("cargo:rustc-link-lib={}", "omp");
-
-    clone_ncnn(&target_dir)?;
-    disable_logs(&target_dir).map_err(|r| r.to_string())?;
-    configure_ncnn_build(&target_dir)
-        .cflag("-O3")
-        .cxxflag("-O3")
-        .build();
-
-    println!("cargo:rustc-link-lib=static={}", "MachineIndependent");
-    println!("cargo:rustc-link-lib=static={}", "SPIRV");
-    println!("cargo:rustc-link-lib=static={}", "GenericCodeGen");
-    println!("cargo:rustc-link-lib=static={}", "OSDependent");
-    println!("cargo:rustc-link-lib=static={}", "OGLCompiler");
-    println!("cargo:rustc-link-lib=static={}", "glslang");
-    println!("cargo:rustc-link-lib=static={}", "ncnn");
-    Ok(())
-}
+use std::path::{Path, PathBuf};
+use std::fs;
 
 fn main() {
-    let output = std::env::var("OUT_DIR").unwrap();
-    let output_path = PathBuf::from(&output);
+    let output_directory = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let manifest_directory = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let source_directory = manifest_directory.join("src");
 
-    if cfg!(feature = "model-realesr-animevideov3") || cfg!(feature = "model-realesrgan-plus") || cfg!(feature = "model-realesrgan-plus-anime") {
-        if let Err(e) = download_models(&output_path) {
-            panic!("Failed to download models: {}", e);
+    let cpp_directory = source_directory.join("cpp");
+    let shaders_directory = source_directory.join("shaders");
+
+    let spirv_header_directory = output_directory.join("spirv_headers");
+    fs::create_dir_all(&spirv_header_directory).unwrap();
+
+    println!("cargo:rerun-if-changed={}", cpp_directory.display());
+    println!("cargo:rerun-if-changed={}", shaders_directory.display());
+
+    generate_spirv_headers(&shaders_directory, &spirv_header_directory);
+    build_library(&cpp_directory, &spirv_header_directory);
+}
+
+fn generate_spirv_headers(shaders_directory: &Path, output_directory: &Path) {
+    let mut compiler = shaderc::Compiler::new().unwrap();
+    let options = shaderc::CompileOptions::new().unwrap();
+    
+    let shaders = [
+        "realesrgan_preproc.comp",
+        "realesrgan_postproc.comp", 
+        "realesrgan_preproc_tta.comp",
+        "realesrgan_postproc_tta.comp",
+    ];
+
+    for shader_name in &shaders {
+        let shader_path = shaders_directory.join(shader_name);
+        let shader_source = fs::read_to_string(&shader_path).unwrap();
+        let stem = Path::new(shader_name).file_stem().unwrap().to_str().unwrap();
+
+        compile_shader_variant(&mut compiler, &options, &shader_source, stem, "", output_directory);
+        compile_shader_variant(&mut compiler, &options, &shader_source, stem, "_fp16s", output_directory);
+        compile_shader_variant(&mut compiler, &options, &shader_source, stem, "_int8s", output_directory);
+    }
+}
+
+fn compile_shader_variant(
+    compiler: &mut shaderc::Compiler,
+    base_options: &shaderc::CompileOptions,
+    source: &str,
+    base_name: &str,
+    variant_suffix: &str,
+    output_directory: &Path,
+) {
+    let mut options = base_options.clone().unwrap();
+    
+    match variant_suffix {
+        "_fp16s" => {
+            options.add_macro_definition("NCNN_fp16_storage", Some("1"));
         }
+        "_int8s" => {
+            options.add_macro_definition("NCNN_fp16_storage", Some("1"));
+            options.add_macro_definition("NCNN_int8_storage", Some("1"));
+        }
+        _ => {}
     }
 
-    println!("cargo:rustc-link-search=native={}", output_path.join("lib").display());
-    println!("cargo:rustc-link-search=native={}", output_path.join("lib64").display());
+    let result = compiler.compile_into_spirv(
+        source,
+        shaderc::ShaderKind::Compute,
+        &format!("{base_name}.comp"),
+        "main",
+        Some(&options),
+    ).unwrap();
 
-    println!("cargo:rustc-link-lib={}", "stdc++");
-    if cfg!(feature = "system-ncnn") {
-        println!("cargo:rustc-link-lib={}", "ncnn");
-    } else {
-        if let Err(e) = build_ncnn(&output_path) {
-            panic!("Failed to build ncnn: {}", e);
+    let spirv_bytes = result.as_binary_u8();
+    let hex_content = generate_hex_header(spirv_bytes);
+    
+    let output_filename = format!("{base_name}{variant_suffix}.spv.hex.h");
+    let output_path = output_directory.join(output_filename);
+    fs::write(output_path, hex_content).unwrap();
+}
+
+fn generate_hex_header(spirv_bytes: &[u8]) -> String {
+    let mut header = String::new();
+    let spirv_u32 = spirv_bytes.chunks_exact(4)
+        .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect::<Vec<u32>>();
+    
+    for (index, value) in spirv_u32.iter().enumerate() {
+        if index % 8 == 0 {
+            header.push_str("    ");
+        }
+        header.push_str(&format!("0x{value:08x}"));
+        if index < spirv_u32.len() - 1 {
+            header.push(',');
+        }
+        if index % 8 == 7 || index == spirv_u32.len() - 1 {
+            header.push('\n');
+        } else {
+            header.push(' ');
         }
     }
-    Config::new("src").build();
-    println!("cargo:rustc-link-lib=static={}", "realesrgan-wrapper");
+    header
+}
+
+fn build_library(cpp_directory: &Path, spirv_include_directory: &Path) {
+    println!("cargo:rustc-link-lib=stdc++");
+    
+    if cfg!(target_os = "linux") {
+        println!("cargo:rustc-link-lib=gomp");
+        println!("cargo:rustc-link-lib=pthread");
+    }
+
+    pkg_config::probe_library("ncnn").unwrap();
+    pkg_config::probe_library("vulkan").unwrap();
+
+    let mut build = cc::Build::new();
+
+    build
+        .cpp(true)
+        .std("c++17")
+        .opt_level(3)
+        .warnings(false)
+        .flag_if_supported("-fopenmp")
+        .include(cpp_directory)
+        .include(spirv_include_directory)
+        .file(cpp_directory.join("wrapper.cpp"))
+        .file(cpp_directory.join("realesrgan.cpp"));
+
+    build.compile("realesrgan-wrapper");
 }

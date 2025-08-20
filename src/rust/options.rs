@@ -84,6 +84,7 @@ pub enum OptionsScaleFactor {
     Quadruple = 4,
 }
 
+#[derive(Debug)]
 pub struct Options<'a> {
     pub gpuid: i32,
     pub tta_mode: bool,

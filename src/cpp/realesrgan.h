@@ -4,9 +4,9 @@
 #define REALESRGAN_H
 
 // ncnn
-#include "net.h"
-#include "gpu.h"
-#include "layer.h"
+#include "ncnn/net.h"
+#include "ncnn/gpu.h"
+#include "ncnn/layer.h"
 
 class RealESRGAN
 {

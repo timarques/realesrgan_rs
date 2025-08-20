@@ -1,10 +1,7 @@
 use crate::Options;
+use crate::Error;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicPtr, Ordering};
-use std::sync::Once;
-
-use libc::{c_char, c_int, c_uchar, c_void, FILE};
+use libc::{c_int, c_uchar, c_void, FILE};
 
 extern "C" {
     fn realesrgan_init(
@@ -29,101 +26,136 @@ extern "C" {
     fn realesrgan_process(
         realesrgan: *mut c_void,
         in_image: *const c_uchar,
-        out_image: *const c_uchar,
+        out_image: *mut c_uchar,
         width: c_int,
         height: c_int,
         channels: c_int,
     ) -> c_int;
 }
 
-
-#[derive(Clone, Debug)]
-pub struct RealEsrgan {
-    pointer: Arc<AtomicPtr<c_void>>,
-    scale_factor: i32,
+#[derive(Debug)]
+pub struct RealEsrgan<'a> {
+    pointer: *mut c_void,
+    options: Options<'a>
 }
 
-impl RealEsrgan {
-
-    fn validate_gpu(gpu: i32) -> Result<(), String> {
+impl<'a> RealEsrgan<'a> {
+    fn validate_gpu(gpu: i32) -> Result<(), Error> {
         if gpu == -1 {
-            return Ok(())
+            return Ok(());
         }
+        
         let count = unsafe { realesrgan_get_gpu_count() };
         if gpu >= count {
-            unsafe { realesrgan_destroy_gpu_instance() }
-            return Err(format!("gpu {} not found. available gpus: {}", gpu, count))
-        }
-        Ok(())
-    }
-
-    fn create_file_pointer(contents: &[u8]) -> *mut FILE {
-        let buffer = contents.as_ptr() as *mut c_void;
-        let size = contents.len();
-        
-        unsafe { libc::fmemopen(buffer, size, "rb\0".as_ptr() as *const c_char) }
-    }
-
-    fn load_model(realcugan: *mut c_void, param: &[u8], bin: &[u8]) -> Result<(), String> {
-        if param.len() == 0 || bin.len() == 0 {
-            return Err(format!("invalid model"))
-        }
-
-        let file_bin_pointer = Self::create_file_pointer(bin);
-        let file_param_pointer = Self::create_file_pointer(param);
-        if file_bin_pointer.is_null() || file_param_pointer.is_null() {
-            return Err(format!("failed to create file pointers"));
-        }
-
-        let result = unsafe { realesrgan_load_files(realcugan, file_param_pointer, file_bin_pointer) };
-        if result != 0 {
-            Err(format!("failed to load model files. error code: {}", result))
+            unsafe { realesrgan_destroy_gpu_instance(); }
+            Err(Error::GpuNotFound {
+                requested: gpu,
+                available: count,
+            })
         } else {
             Ok(())
         }
     }
 
-    fn setup_clean_up() {
-        static CLEANUP: Once = Once::new();
-        CLEANUP.call_once(|| {
-            extern "C" fn cleanup() {
-                unsafe { realesrgan_destroy_gpu_instance() }
-            }
-            unsafe { libc::atexit(cleanup) };
-        });
+    fn create_file_pointer(contents: &[u8]) -> *mut FILE {
+        unsafe { 
+            libc::fmemopen(
+                contents.as_ptr() as *mut c_void,
+                contents.len(),
+                c"rb".as_ptr()
+            )
+        }
     }
 
-    pub fn new(options: Options) -> Result<Self, String> {
+    fn load_model(realesrgan: *mut c_void, param: &[u8], bin: &[u8]) -> Result<(), Error> {
+        if param.is_empty() || bin.is_empty() {
+            return Err(Error::InvalidModel);
+        }
+
+        let file_param_pointer = Self::create_file_pointer(param);
+        let file_bin_pointer = Self::create_file_pointer(bin);
+
+        if file_bin_pointer.is_null() || file_param_pointer.is_null() {
+            if !file_param_pointer.is_null() {
+                unsafe { libc::fclose(file_param_pointer); }
+            }
+
+            if !file_bin_pointer.is_null() { 
+                unsafe { libc::fclose(file_bin_pointer); }
+            }
+
+            return Err(Error::FilePointerCreationFailed);
+        }
+
+        let result = unsafe {
+            realesrgan_load_files(
+                realesrgan,
+                file_param_pointer,
+                file_bin_pointer
+            )
+        };
+
+        unsafe {
+            libc::fclose(file_param_pointer);
+            libc::fclose(file_bin_pointer);
+        }
+
+        if result != 0 {
+            Err(Error::ModelLoadFailed { code: result })
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn new(options: Options<'a>) -> Result<Self, Error> {
         Self::validate_gpu(options.gpuid)?;
-        let pointer = unsafe { realesrgan_init(options.gpuid, options.tta_mode, options.scale_factor, options.tilesize) };
+
+        let pointer = unsafe {
+            realesrgan_init(
+                options.gpuid,
+                options.tta_mode,
+                options.scale_factor,
+                options.tilesize
+            )
+        };
+
+        if pointer.is_null() {
+            return Err(Error::InitializationFailed);
+        }
+
         Self::load_model(pointer, options.param, options.bin)?;
-        Self::setup_clean_up();
 
         Ok(Self {
-            pointer: Arc::new(AtomicPtr::new(pointer)),
-            scale_factor: options.scale_factor,
+            pointer,
+            options,
         })
     }
 
-    pub fn process(&self, input: &[u8], width: usize, height: usize) -> Result<Vec<u8>, String> {
-        let ptr = self.pointer.load(Ordering::Acquire);
-        if ptr.is_null() {
-            return Err(format!("invalid pointer"))
+    pub fn process(&self, input: &[u8], width: usize, height: usize) -> Result<Vec<u8>, Error> {
+        if self.pointer.is_null() {
+            return Err(Error::InvalidPointer);
         }
 
         let input_length = input.len();
-        let channels = input_length / (width * height);
-
-        if input_length % (width * height) != 0 {
-            return Err(format!("invalid input"))
+        let expected_length = width * height;
+        
+        if input_length % expected_length != 0 {
+            return Err(Error::InvalidInput {
+                expected_length,
+                actual_length: input_length
+            });
         }
 
-        let output_length = (width * self.scale_factor as usize) * (height * self.scale_factor as usize)  * channels;
+        let channels = input_length / expected_length;
+        let output_length = (width * self.options.scale_factor as usize) 
+                          * (height * self.options.scale_factor as usize) 
+                          * channels;
+
         let mut output = vec![0u8; output_length];
 
-        let result = unsafe {
+        let code = unsafe {
             realesrgan_process(
-                ptr,
+                self.pointer,
                 input.as_ptr(),
                 output.as_mut_ptr(),
                 width as c_int,
@@ -132,21 +164,40 @@ impl RealEsrgan {
             )
         };
 
-        if result != 0 {
-            return Err(format!("failed to process image"))
+        if code == 0 {
+            Ok(output)
+        } else {
+            Err(Error::ProcessingFailed { code })
         }
+    }
 
-        Ok(output)
+    pub fn process_batch<I, B>(
+        &self,
+        inputs: I,
+        width: usize,
+        height: usize,
+    ) -> Result<Vec<Vec<u8>>, Error>
+    where 
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        inputs
+            .into_iter()
+            .map(|input_chunk| self.process(input_chunk.as_ref(), width, height))
+            .collect()
     }
 
     #[cfg(feature = "image")]
-    pub fn process_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<crate::Image, String> {
-        let img = image::open(path).map_err(|e| format!("failed to open image: {}", e))?;
+    pub fn process_file<P>(&self, path: P) -> Result<crate::Image, Error>
+    where 
+        P: AsRef<std::path::Path>,
+    {
+        let img = image::open(path).map_err(|e| Error::ImageOpenFailed(e.to_string()))?;
         self.process_image(img)
     }
 
     #[cfg(feature = "image")]
-    pub fn process_image(&self, image: crate::Image) -> Result<crate::Image, String> {
+    pub fn process_image(&self, image: crate::Image) -> Result<crate::Image, Error> {
         use image::{ColorType, ImageBuffer, DynamicImage};
 
         let color_type = image.color();
@@ -154,8 +205,8 @@ impl RealEsrgan {
         let width = image.width();
         let height = image.height();
         let output = self.process(&input, width as usize, height as usize)?;
-        let new_width = width * self.scale_factor as u32;
-        let new_height = height * self.scale_factor as u32;
+        let new_width = width * self.options.scale_factor as u32;
+        let new_height = height * self.options.scale_factor as u32;
     
         let dynamic_image = match color_type {
             ColorType::Rgb8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgb8),
@@ -165,21 +216,14 @@ impl RealEsrgan {
             _ => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgb8),
         };
     
-        Ok(dynamic_image.ok_or(format!("failed to convert color type"))?)
+        dynamic_image.ok_or(Error::ColorConversionFailed)
     }
-
 }
 
-impl Drop for RealEsrgan {
+impl Drop for RealEsrgan<'_> {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.pointer) == 1 {
-            let ptr = self.pointer.load(Ordering::Acquire);
-            if !ptr.is_null() {
-                unsafe { realesrgan_free(ptr) }
-            }
+        if !self.pointer.is_null() {
+            unsafe { realesrgan_free(self.pointer) };
         }
     }
 }
-
-unsafe impl Send for RealEsrgan {}
-unsafe impl Sync for RealEsrgan {}

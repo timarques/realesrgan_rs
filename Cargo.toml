@@ -10,9 +10,12 @@ crate-type = ["lib"]
 [dependencies]
 libc = "0.2.159"
 image = { version = "0.25.2", optional = true }
+thiserror = "2.0.16"
 
 [build-dependencies]
-cmake = "^0.1.48"
+cc = "1.2.33"
+pkg-config = "0.3.32"
+shaderc = "0.9.1"
 
 [profile.release]
 lto = true
@@ -23,7 +26,6 @@ incremental = false
 
 [features]
 default = ["image", "models"]
-system-ncnn = []
 image = ["dep:image"]
 models = ["model-realesr-animevideov3", "model-realesrgan-plus", "model-realesrgan-plus-anime"]
 model-realesr-animevideov3 = []

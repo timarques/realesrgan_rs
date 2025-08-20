@@ -49,42 +49,6 @@ fn from_image() {
         upscaled_metadata.len() > original_metadata.len(),
         "Upscaled image file is not larger than the original"
     );
-    let _ = std::fs::remove_file(&upscaled_save_path);
+    let _ = std::fs::remove_file(upscaled_save_path);
 
-}
-
-#[cfg(feature = "model-realesr-animevideov3")]
-#[cfg(feature = "image")]
-#[test]
-fn with_threads() {
-    let result = RealEsrgan::new(Options::default().model(OptionsModel::RealESRAnimeVideoV3x2));
-
-    assert!(result.is_ok(), "{}", result.err().unwrap().to_string());
-    let realesrgan = result.unwrap();
-
-    let mut threads = Vec::new();
-
-    for i in 0..10 {
-
-        let realesrgan_clone = realesrgan.clone();
-
-        let handle = std::thread::spawn(move || {
-            let result = realesrgan_clone.process_file(&std::path::PathBuf::from(IMAGE));
-            assert!(result.is_ok());
-            let upscaled_image = result.unwrap();
-            let path = format!("/tmp/upscaled{}.png", i);
-            upscaled_image.save_with_format(&path, image::ImageFormat::Png).unwrap();
-            assert!(Path::new(&path).exists(), "Failed to save upscaled image");
-            let _ = std::fs::remove_file(&path);
-        });
-
-        threads.push(handle);
-
-    }
-
-    drop(realesrgan);
-
-    for thread in threads {
-        assert!(thread.join().is_ok());
-    }
 }
