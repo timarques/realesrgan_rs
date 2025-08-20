@@ -34,7 +34,7 @@ fn download_models(
 
     let release_dir = output.join("release");
     if release_dir.exists() {
-        fs::remove_dir_all(&release_dir)?;
+        return Ok(());
     }
 
     let zip_path = output.join("realesrgan-ncnn-vulkan-20220424-ubuntu.zip");
