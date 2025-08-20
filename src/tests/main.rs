@@ -1,7 +1,7 @@
 use std::path::Path;
 use realesrgan_rs::{RealEsrgan, Options, OptionsModel};
 
-const IMAGE: &str = "./tests/image.jpg";
+const IMAGE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/tests/image.jpg");
 
 #[test]
 #[cfg(feature = "model-realesr-animevideov3")]

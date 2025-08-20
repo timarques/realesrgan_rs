@@ -2,32 +2,32 @@ use std::path::Path;
 
 #[cfg(feature = "model-realesr-animevideov3")]
 const MODEL_REALESR_ANIMEVIDEOV3_X2: (&[u8], &[u8]) = ( 
-    include_bytes!("../../models/realesr-animevideov3-x2.param"),
-    include_bytes!("../../models/realesr-animevideov3-x2.bin")
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x2.param")),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x2.bin"))
 );
 
 #[cfg(feature = "model-realesr-animevideov3")]
 const MODEL_REALESR_ANIMEVIDEOV3_X3: (&[u8], &[u8]) = ( 
-    include_bytes!("../../models/realesr-animevideov3-x3.param"),
-    include_bytes!("../../models/realesr-animevideov3-x3.bin")
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x3.param")),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x3.bin"))
 );
 
 #[cfg(feature = "model-realesr-animevideov3")]
 const MODEL_REALESR_ANIMEVIDEOV3_X4: (&[u8], &[u8]) = (
-    include_bytes!("../../models/realesr-animevideov3-x4.param"),
-    include_bytes!("../../models/realesr-animevideov3-x4.bin"),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x4.param")),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesr-animevideov3-x4.bin")),
 );
 
 #[cfg(feature = "model-realesrgan-plus")]
 const MODEL_REALESRGAN_X4PLUS: (&[u8], &[u8]) = (
-    include_bytes!("../../models/realesrgan-x4plus.param"),
-    include_bytes!("../../models/realesrgan-x4plus.bin"),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesrgan-x4plus.param")),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesrgan-x4plus.bin")),
 );
 
 #[cfg(feature = "model-realesrgan-plus-anime")]
 const MODEL_REALESRGAN_X4PLUS_ANIME: (&[u8], &[u8]) = (
-    include_bytes!("../../models/realesrgan-x4plus-anime.param"),
-    include_bytes!("../../models/realesrgan-x4plus-anime.bin"),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesrgan-x4plus-anime.param")),
+    include_bytes!(concat!(env!("MODELS_DIRECTORY"), "/realesrgan-x4plus-anime.bin")),
 );
 
 #[cfg(any(feature = "model-realesr-animevideov3", feature = "model-realesrgan-plus", feature = "model-realesrgan-plus-anime"))]

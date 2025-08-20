@@ -7,6 +7,10 @@ edition = "2021"
 path = "src/rust/lib.rs"
 crate-type = ["lib"]
 
+[[test]]
+name = "tests"
+path = "src/tests/main.rs"
+
 [dependencies]
 libc = "0.2.159"
 image = { version = "0.25.2", optional = true }
@@ -14,8 +18,10 @@ thiserror = "2.0.16"
 
 [build-dependencies]
 cc = "1.2.33"
+minreq = { version = "2.14.0", features = ["https"] }
 pkg-config = "0.3.32"
 shaderc = "0.9.1"
+zip = { version = "4.3.0", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = true
