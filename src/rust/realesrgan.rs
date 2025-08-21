@@ -34,12 +34,12 @@ extern "C" {
 }
 
 #[derive(Debug)]
-pub struct RealEsrgan<'a> {
+pub struct RealEsrgan {
     pointer: *mut c_void,
-    options: Options<'a>
+    scale_factor: i32,
 }
 
-impl<'a> RealEsrgan<'a> {
+impl RealEsrgan {
     fn validate_gpu(gpu: i32) -> Result<(), Error> {
         if gpu == -1 {
             return Ok(());
@@ -107,7 +107,7 @@ impl<'a> RealEsrgan<'a> {
         }
     }
 
-    pub fn new(options: Options<'a>) -> Result<Self, Error> {
+    pub fn new(options: Options) -> Result<Self, Error> {
         Self::validate_gpu(options.gpuid)?;
 
         let pointer = unsafe {
@@ -125,9 +125,11 @@ impl<'a> RealEsrgan<'a> {
 
         Self::load_model(pointer, options.param, options.bin)?;
 
+        let scale_factor = options.scale_factor;
+
         Ok(Self {
             pointer,
-            options,
+            scale_factor,
         })
     }
 
@@ -147,8 +149,8 @@ impl<'a> RealEsrgan<'a> {
         }
 
         let channels = input_length / expected_length;
-        let output_length = (width * self.options.scale_factor as usize) 
-                          * (height * self.options.scale_factor as usize) 
+        let output_length = (width * self.scale_factor as usize) 
+                          * (height * self.scale_factor as usize) 
                           * channels;
 
         let mut output = vec![0u8; output_length];
@@ -205,8 +207,8 @@ impl<'a> RealEsrgan<'a> {
         let width = image.width();
         let height = image.height();
         let output = self.process(&input, width as usize, height as usize)?;
-        let new_width = width * self.options.scale_factor as u32;
-        let new_height = height * self.options.scale_factor as u32;
+        let new_width = width * self.scale_factor as u32;
+        let new_height = height * self.scale_factor as u32;
     
         let dynamic_image = match color_type {
             ColorType::Rgb8 => ImageBuffer::from_raw(new_width, new_height, output).map(DynamicImage::ImageRgb8),
@@ -220,10 +222,12 @@ impl<'a> RealEsrgan<'a> {
     }
 }
 
-impl Drop for RealEsrgan<'_> {
+impl Drop for RealEsrgan {
     fn drop(&mut self) {
         if !self.pointer.is_null() {
             unsafe { realesrgan_free(self.pointer) };
         }
     }
 }
+
+unsafe impl Send for RealEsrgan {}
