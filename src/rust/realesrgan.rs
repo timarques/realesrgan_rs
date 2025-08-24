@@ -199,7 +199,7 @@ impl RealEsrgan {
     }
 
     #[cfg(feature = "image")]
-    pub fn process_image(&self, image: crate::Image) -> Result<crate::Image, Error> {
+    pub fn process_image(&self, image: &crate::Image) -> Result<crate::Image, Error> {
         use image::{ColorType, ImageBuffer, DynamicImage};
 
         let color_type = image.color();
