@@ -194,8 +194,8 @@ impl RealEsrgan {
     where 
         P: AsRef<std::path::Path>,
     {
-        let img = image::open(path).map_err(|e| Error::ImageOpenFailed(e.to_string()))?;
-        self.process_image(img)
+        let image = image::open(path).map_err(|e| Error::ImageOpenFailed(e.to_string()))?;
+        self.process_image(&image)
     }
 
     #[cfg(feature = "image")]

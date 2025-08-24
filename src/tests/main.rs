@@ -31,7 +31,7 @@ fn from_image() {
     let original_with = d_image.width();
     let original_height = d_image.height();
 
-    let upscaled_image = realesrgan.process_image(d_image).expect("Failed to upscale image");
+    let upscaled_image = realesrgan.process_image(&d_image).expect("Failed to upscale image");
 
     let upscaled_save_path = "/tmp/upscaled.png";
     upscaled_image.save_with_format(upscaled_save_path, image::ImageFormat::Png).unwrap();
